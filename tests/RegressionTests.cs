@@ -219,7 +219,7 @@ namespace Ferry
                 Require(FolderCatalog.SupportsMarkdown(Path.Combine(input, name)), "direct selection rejected: " + name);
             }
             var converted = MarkdownService.Convert(snapshot, names, true, Path.Combine(_root, "markdown-sources"));
-            Require(converted.ConvertedCount == names.Length && converted.Failures.Count == 0 && converted.OutputCount == 1, "sources not combined");
+            Require(converted.ConvertedCount == names.Length && converted.Failures.Count == 0 && converted.FilesWritten == 1, "sources not combined");
             var content = File.ReadAllText(converted.OutputPath);
             Require(content.Contains("```csharp") && content.Contains("```makefile") && content.Contains("```dockerfile"), "language fences missing");
             Require(content.Contains("```\n// source 日本語: source.unlisted".Replace("\n", Environment.NewLine)), "unknown source needs plain fence");
