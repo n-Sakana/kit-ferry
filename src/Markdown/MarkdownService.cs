@@ -114,7 +114,7 @@ namespace Ferry
                     file.Extension);
                 if (result.Succeeded)
                 {
-                    builder.AppendLine(result.Content.TrimEnd('\r', '\n'));
+                    AppendContent(builder, file, result);
                     converted++;
                 }
                 else
@@ -177,7 +177,7 @@ namespace Ferry
                 builder.Append("# ");
                 builder.AppendLine(EscapeHeading(file.Name));
                 builder.AppendLine();
-                builder.AppendLine(result.Content.TrimEnd('\r', '\n'));
+                AppendContent(builder, file, result);
                 WriteUtf8Atomically(outputPath, builder.ToString());
                 written++;
             }

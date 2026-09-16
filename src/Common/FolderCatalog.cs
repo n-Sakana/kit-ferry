@@ -6,17 +6,13 @@ namespace Ferry
 {
     internal static class FolderCatalog
     {
-        private static readonly HashSet<string> MarkdownExtensions =
+        private static readonly HashSet<string> MarkdownDocumentExtensions =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 ".pdf",
                 ".docx", ".docm",
                 ".xlsx", ".xlsm",
-                ".pptx", ".pptm",
-                ".txt", ".md", ".markdown", ".csv", ".tsv", ".log",
-                ".json", ".xml", ".html", ".htm", ".yaml", ".yml",
-                ".css", ".js", ".jsx", ".ts", ".tsx", ".py", ".ps1",
-                ".bat", ".cmd", ".sql", ".ini", ".cfg", ".conf"
+                ".pptx", ".pptm"
             };
 
         private static readonly HashSet<string> VbaWorkbookExtensions =
@@ -101,8 +97,10 @@ namespace Ferry
 
         public static bool SupportsMarkdown(string path)
         {
-            return MarkdownExtensions.Contains(
-                (Path.GetExtension(path) ?? string.Empty).ToLowerInvariant());
+            var extension = (Path.GetExtension(path) ?? string.Empty).ToLowerInvariant();
+            if (MarkdownDocumentExtensions.Contains(extension)) return true;
+            // Keep unsupported legacy Office formats on their existing document route.
+            return KindFor(extension, false) == "Other" && KnowledgeStudio.Extract.IsTextFile(path);
         }
 
         public static bool SupportsVba(string path)
@@ -116,7 +114,8 @@ namespace Ferry
             IEnumerable<string> extensions;
             if (string.Equals(mode, "markdown", StringComparison.OrdinalIgnoreCase))
             {
-                extensions = MarkdownExtensions;
+                // Content, not a suffix, determines whether Markdown can read the file.
+                return "*";
             }
             else if (string.Equals(mode, "vba", StringComparison.OrdinalIgnoreCase))
             {
@@ -194,7 +193,8 @@ namespace Ferry
 
             foreach (var file in currentFiles)
             {
-                if (!ShouldShow(file))
+                if (!ShouldShow(file) && !(file.Name.StartsWith(".", StringComparison.Ordinal)
+                    && SupportsMarkdown(file.FullName)))
                 {
                     continue;
                 }
@@ -270,19 +270,20 @@ namespace Ferry
         private static FolderFile Describe(FileInfo file, string name)
         {
             var extension = file.Extension.ToLowerInvariant();
+            var markdownSupported = SupportsMarkdown(file.FullName);
             return new FolderFile(
                 file.FullName,
                 name,
                 extension,
                 BadgeFor(extension),
-                KindFor(extension),
+                KindFor(extension, markdownSupported),
                 file.Length,
                 new DateTimeOffset(file.LastWriteTimeUtc, TimeSpan.Zero),
-                MarkdownExtensions.Contains(extension),
+                markdownSupported,
                 VbaWorkbookExtensions.Contains(extension));
         }
 
-        private static string KindFor(string extension)
+        private static string KindFor(string extension, bool markdownSupported)
         {
             switch (extension)
             {
@@ -307,34 +308,8 @@ namespace Ferry
                 case ".pptx":
                 case ".pptm":
                     return "PowerPoint";
-                case ".txt":
-                case ".md":
-                case ".markdown":
-                case ".csv":
-                case ".tsv":
-                case ".log":
-                case ".json":
-                case ".xml":
-                case ".html":
-                case ".htm":
-                case ".yaml":
-                case ".yml":
-                case ".css":
-                case ".js":
-                case ".jsx":
-                case ".ts":
-                case ".tsx":
-                case ".py":
-                case ".ps1":
-                case ".bat":
-                case ".cmd":
-                case ".sql":
-                case ".ini":
-                case ".cfg":
-                case ".conf":
-                    return "Text";
                 default:
-                    return "Other";
+                    return markdownSupported ? "Text" : "Other";
             }
         }
 
