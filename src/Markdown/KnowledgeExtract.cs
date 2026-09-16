@@ -129,12 +129,12 @@ namespace KnowledgeStudio
         {
             try
             {
-            if (count >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
-                return DecodeText(bytes, count, 3, new UTF8Encoding(false, true), "UTF-8 BOM", complete);
-            if (count >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
-                return DecodeText(bytes, count, 2, new UnicodeEncoding(false, false, true), "UTF-16 LE", complete);
-            if (count >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
-                return DecodeText(bytes, count, 2, new UnicodeEncoding(true, false, true), "UTF-16 BE", complete);
+                if (count >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+                    return DecodeText(bytes, count, 3, new UTF8Encoding(false, true), "UTF-8 BOM", complete);
+                if (count >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+                    return DecodeText(bytes, count, 2, new UnicodeEncoding(false, false, true), "UTF-16 LE", complete);
+                if (count >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
+                    return DecodeText(bytes, count, 2, new UnicodeEncoding(true, false, true), "UTF-16 BE", complete);
 
                 try { return DecodeText(bytes, count, 0, new UTF8Encoding(false, true), "UTF-8", complete); }
                 catch (DecoderFallbackException)
@@ -151,17 +151,17 @@ namespace KnowledgeStudio
         private static ExtractResult DecodeText(byte[] bytes, int count, int offset,
             Encoding encoding, string name, bool complete)
         {
-                char[] chars = new char[encoding.GetMaxCharCount(count - offset)];
-                // Do not mistake a multibyte character cut by the catalogue sample
-                // boundary for bad input. EOF and export always flush the decoder.
-                int length = encoding.GetDecoder().GetChars(bytes, offset, count - offset, chars, 0, complete);
-                for (int i = 0; i < length; i++)
-                {
-                    char c = chars[i];
-                    if (c == '\ufffd' || (char.IsControl(c) && c != '\t' && c != '\r' && c != '\n' && c != '\f'))
-                        return ExtractResult.Failure("text", "バイナリまたは不正な文字を含むため、テキストとして読み取れません。");
-                }
-                return new ExtractResult { Content = new string(chars, 0, length), Method = "text", Notes = name, Succeeded = true };
+            char[] chars = new char[encoding.GetMaxCharCount(count - offset)];
+            // Do not mistake a multibyte character cut by the catalogue sample
+            // boundary for bad input. EOF and export always flush the decoder.
+            int length = encoding.GetDecoder().GetChars(bytes, offset, count - offset, chars, 0, complete);
+            for (int i = 0; i < length; i++)
+            {
+                char c = chars[i];
+                if (c == '\ufffd' || (char.IsControl(c) && c != '\t' && c != '\r' && c != '\n' && c != '\f'))
+                    return ExtractResult.Failure("text", "バイナリまたは不正な文字を含むため、テキストとして読み取れません。");
+            }
+            return new ExtractResult { Content = new string(chars, 0, length), Method = "text", Notes = name, Succeeded = true };
         }
 
         private static class Cp932

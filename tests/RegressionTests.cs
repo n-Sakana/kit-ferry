@@ -256,6 +256,8 @@ namespace Ferry
             File.WriteAllBytes(Path.Combine(input, "invalid.cs"), new byte[] { 0xef, 0xbb, 0xbf, 0xff });
             File.WriteAllBytes(Path.Combine(input, "invalid-utf16.cs"), new byte[] { 0xff, 0xfe, 0x00, 0xd8 });
             File.WriteAllBytes(Path.Combine(input, "truncated-cp932.cs"), new byte[] { 0x82 });
+            File.WriteAllText(Path.Combine(input, "control.cs"), "text\u0093text", new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(input, "replacement.cs"), "text\ufffdtext", new UTF8Encoding(false));
             var snapshot = FolderCatalog.Inspect(input);
             foreach (var file in snapshot.Files)
             {
