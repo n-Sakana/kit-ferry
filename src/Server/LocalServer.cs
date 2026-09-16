@@ -848,8 +848,12 @@ namespace Ferry
                 string outputPath;
                 if (format == "markdown")
                 {
+                    // A transfer's omission list must stay within the selected files.
+                    var requested = new HashSet<string>(selectedNames, StringComparer.CurrentCultureIgnoreCase);
+                    var selectedFiles = source.Files.FindAll(delegate (FolderFile file) { return requested.Contains(file.Name); });
+                    var selectedSource = new FolderSnapshot(source.Path, source.DirectoryPath, source.SourceKind, selectedFiles);
                     outputPath = MarkdownService.Convert(
-                        source,
+                        selectedSource,
                         convertibleNames,
                         true,
                         temporaryRoot).OutputPath;
@@ -1090,12 +1094,7 @@ namespace Ferry
         {
             foreach (var path in paths)
             {
-                if (mode == "markdown" && !FolderCatalog.SupportsMarkdown(path))
-                {
-                    throw new ArgumentException(string.Format(
-                        "Markdown 化の対象外です: {0}",
-                        Path.GetFileName(path)));
-                }
+                // Markdown keeps excluded selections for the names-only report.
                 if (mode == "vba" && !FolderCatalog.SupportsVba(path))
                 {
                     throw new ArgumentException(string.Format(

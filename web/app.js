@@ -893,7 +893,7 @@
     }
 
     var files = Array.from(state.selections.markdown);
-    if (files.length === 0) {
+    if (files.length === 0 && !markdownOmissionsOnly()) {
       return;
     }
 
@@ -921,7 +921,9 @@
       clearModeSelection("markdown");
       updateOutputAction("markdown");
 
-      if (result.failedCount > 0) {
+      if (result.convertedCount === 0 && result.failedCount === 0) {
+        showToast("対象外の一覧を書き出しました");
+      } else if (result.failedCount > 0) {
         showToast(result.convertedCount + " 件を Markdown 化しました。" + result.failedCount + " 件は読み取れませんでした。 ");
       } else {
         showToast(result.convertedCount + " 件を Markdown 化しました");
@@ -938,9 +940,19 @@
 
   function updateMarkdownAction() {
     var button = document.getElementById("convertMarkdown");
+    var omissionsOnly = markdownOmissionsOnly();
     button.disabled = state.markdownBusy
       || state.role !== "local"
-      || state.selections.markdown.size === 0;
+      || (state.selections.markdown.size === 0 && !omissionsOnly);
+    if (!state.markdownBusy) {
+      button.textContent = omissionsOnly ? "対象外の一覧を書き出す" : "Markdown にする";
+    }
+  }
+
+  function markdownOmissionsOnly() {
+    var folder = state.folders.markdown;
+    return folder && Array.isArray(folder.files) && folder.files.length > 0
+      && folder.files.every(function (file) { return !file.markdownSupported; });
   }
 
   async function loadVbaBook(fileName, detail) {

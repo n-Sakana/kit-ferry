@@ -23,7 +23,7 @@ namespace Ferry
                 SetTitle(mode);
                 var source = ReadSource(path);
                 var files = SelectFiles(source, mode);
-                if (files.Count == 0)
+                if (files.Count == 0 && !(mode == "markdown" && MarkdownService.CanWriteOnlyOmissions(source)))
                 {
                     throw new InvalidOperationException(
                         mode == "markdown"
