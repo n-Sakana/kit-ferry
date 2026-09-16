@@ -406,9 +406,9 @@ namespace Ferry
             var input = Directory.CreateDirectory(Path.Combine(_root, "large-text")).FullName;
             var names = new[] { "small.jsonl", "boundary.jsonl", "large.jsonl", "large.log" };
             File.WriteAllText(Path.Combine(input, names[0]), "SMALL_JSONL", new UTF8Encoding(false));
-            File.WriteAllText(Path.Combine(input, names[1]), new string('a', 1000000), new UTF8Encoding(false));
-            File.WriteAllText(Path.Combine(input, names[2]), "LARGE_JSONL_BODY" + new string('b', 1000000), new UTF8Encoding(false));
-            File.WriteAllText(Path.Combine(input, names[3]), "LARGE_LOG_BODY" + new string('c', 1000000), new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(input, names[1]), new string('a', 1048576), new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(input, names[2]), "LARGE_JSONL_BODY" + new string('b', 1048576), new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(input, names[3]), "LARGE_LOG_BODY" + new string('c', 1048576), new UTF8Encoding(false));
             var snapshot = FolderCatalog.Inspect(input);
             Require(snapshot.Files.All(f => f.MarkdownSupported), "large text disappeared before user choice");
             var excluded = MarkdownService.Convert(snapshot, names, true, Path.Combine(_root, "large-exclude"), null, true);

@@ -9,7 +9,7 @@ namespace Ferry
 {
     internal static class MarkdownService
     {
-        internal const long LargeFileBytes = 1000000;
+        internal const long LargeFileBytes = 1024 * 1024;
 
         public static MarkdownConversionResult Convert(
             FolderSnapshot source,
@@ -120,11 +120,11 @@ namespace Ferry
                 else if (excludeLargeFiles && file.Size > LargeFileBytes)
                     omissions.Add(file, "大きいファイル（1 MB 超・まとめて除外）");
             }
-            if (excludeLargeFiles)
-                files = files.FindAll(delegate (FolderFile file) { return file.Size <= LargeFileBytes; });
             var builder = new StringBuilder();
             builder.Append("# ");
             builder.AppendLine(EscapeHeading(SourceTitle(source, files)));
+            if (excludeLargeFiles)
+                files = files.FindAll(delegate (FolderFile file) { return file.Size <= LargeFileBytes; });
 
             var converted = 0;
             for (var index = 0; index < files.Count; index++)

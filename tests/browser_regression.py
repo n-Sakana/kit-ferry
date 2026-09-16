@@ -302,14 +302,14 @@ with sync_playwright() as pw:
 
     # Browser UI smoke and lifecycle tests. These API results are mocks, not C# server results.
     ui=context.new_page();errors=[];ui.on('pageerror',lambda error:errors.append(str(error)))
-    state={'actual_frame_bytes':1000,'start':0,'batches':0,'stops':[],'uploads':[],'receive_ids':[], 'fail_uploads':1, 'folder_revision':0,'remote':False,'heartbeat':0}
+    state={'actual_frame_bytes':1000,'start':0,'batches':0,'stops':[],'uploads':[],'receive_ids':[], 'fail_uploads':1, 'folder_revision':0,'remote':False,'heartbeat':0,'markdown_requests':[]}
     folder={'path':'/mock/input','directoryPath':'/mock/input','sourceKind':'folder','files':[
         {'name':'sample.txt','extension':'.txt','size':100000,'bytes':100000,'length':100000,'markdownSupported':True,'vbaWorkbook':False}]}
     def api(route):
         request=route.request;path=urlsplit(request.url).path
         body=json.loads(request.post_data or '{}') if request.method=='POST' else {}
         result={}
-        if path=='/api/status': result={'device':'Browser regression','role':'remote' if state['remote'] else 'local','initialMode':'optical','capabilities':{}}
+        if path=='/api/status': result={'device':'Browser regression','role':'remote' if state['remote'] else 'local','initialMode':'optical','markdownLargeFileBytes':1048576,'capabilities':{}}
         elif path=='/api/folder': result={**folder,'revision':state['folder_revision']}
         elif path=='/api/remotes': result={'remotes':[]}
         elif path=='/api/remote-entry': route.fulfill(status=503,json={'error':'test: Tailnet unavailable'});return
@@ -335,6 +335,9 @@ with sync_playwright() as pw:
                     'totalBytes':100000,'progress':1 if complete else n/12,'elapsedSeconds':1,'kilobytesPerSecond':4,
                     'label':'synthetic','fileCount':1,'outputPath':'/mock/output'}
         elif path=='/api/remotes/heartbeat': state['heartbeat']+=1;result={'command':None}
+        elif path=='/api/markdown':
+            state['markdown_requests'].append(body)
+            result={'outputPath':'/mock/output/combined.md','convertedCount':len(body['files']),'failedCount':0,'filesWritten':1}
         route.fulfill(json=result)
     if OFFLINE: memory_ui(ui,api)
     else:
@@ -407,6 +410,50 @@ with sync_playwright() as pw:
     assert not ui.locator('#qrOverlay').is_hidden()
     passed('remote folder metadata polling does not stop an active QR display')
     ui.click('#closeQr')
+    state['remote']=False
+    def markdown_page(files):
+        folder['files']=files
+        page=context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
+        if OFFLINE: memory_ui(page,api)
+        else:
+            page.route('**/api/**',api);page.goto(origin+'/')
+        page.locator('.sidebar [data-page="markdown"]').click()
+        page.wait_for_function("!document.getElementById('convertMarkdown').disabled")
+        return page
+    def markdown_file(name,size,supported=True):
+        return {'name':name,'extension':'.jsonl','size':size,'markdownSupported':supported,'vbaWorkbook':False}
+    md=markdown_page([markdown_file('small.jsonl',90),markdown_file('boundary.jsonl',1048576)])
+    with md.expect_response('**/api/markdown'): md.click('#convertMarkdown')
+    assert md.locator('#markdownLargeDialog').is_hidden()
+    assert state['markdown_requests'][-1]['excludeLargeFiles'] is False
+    assert md.locator('#convertMarkdown').is_disabled()
+    passed('small JSONL and exactly 1 MB convert without a confirmation')
+    md.close()
+    for choice,expected in [('exclude',True),('include',False)]:
+        md=markdown_page([markdown_file('small.jsonl',90),markdown_file('a.jsonl',1048577),markdown_file('b.log',2097152)])
+        before=len(state['markdown_requests']);md.click('#convertMarkdown')
+        md.locator('#markdownLargeDialog').wait_for(state='visible')
+        assert md.locator('#markdownLargeFiles li').count()==2
+        assert '3 MB' in md.locator('#markdownLargeTotal').inner_text()
+        assert md.locator('#markdownLargeDialog input').count()==0
+        assert len(state['markdown_requests'])==before
+        md.keyboard.press('Escape')
+        md.wait_for_function("!document.getElementById('convertMarkdown').disabled")
+        assert len(state['markdown_requests'])==before and md.locator('#markdownFiles .file-row[aria-checked="true"]').count()==3
+        md.click('#convertMarkdown')
+        with md.expect_response('**/api/markdown'): md.locator('#markdownLargeDialog button[value="'+choice+'"]').click()
+        assert len(state['markdown_requests'])==before+1
+        assert state['markdown_requests'][-1]['excludeLargeFiles'] is expected
+        assert md.locator('#markdownLargeDialog').is_hidden()
+        md.close()
+    passed('large files ask once as a group; cancel preserves selection; exclude/include reaches the API')
+    md=markdown_page([markdown_file('icon.svg',200,False)])
+    assert md.locator('#convertMarkdown').inner_text()=='対象外の一覧を書き出す'
+    with md.expect_response('**/api/markdown'): md.click('#convertMarkdown')
+    assert state['markdown_requests'][-1]['files']==[]
+    assert md.locator('#convertMarkdown').is_disabled()
+    md.close()
+    passed('excluded-only inputs can export their names and reset the selection')
     assert not errors,errors
     results['ui_page_errors']=errors
     browser.close()
