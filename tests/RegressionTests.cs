@@ -39,6 +39,7 @@ namespace Ferry
                 Run("file selection rejects duplicates and traversal", TestSelection);
                 Run("parallel output directories are unique", TestOutputDirectories);
                 Run("plain-text Markdown conversion", TestMarkdown);
+                Run("hidden entries stay hidden while explicit text selection works", TestMarkdownVisibility);
                 Run("source files and extensionless text Markdown conversion", TestMarkdownSources);
                 Run("BOM and CP932 source text", TestMarkdownEncodings);
                 Run("binary and invalid text excluded from Markdown", TestMarkdownBinary);
@@ -206,7 +207,7 @@ namespace Ferry
         {
             var input = Path.Combine(_root, "sources");
             Directory.CreateDirectory(input);
-            var names = new[] { "Program.cs", "Makefile", "Dockerfile", "LICENSE", ".gitignore",
+            var names = new[] { "Program.cs", "Makefile", "Dockerfile", "LICENSE",
                 "main.c", "main.cpp", "main.h", "main.hpp", "main.java", "main.rs", "main.go",
                 "main.rb", "main.php", "main.swift", "main.kt", "main.sh", "config.toml", "main.vb",
                 "main.fs", "main.lua", "main.r", "main.scss", "main.vue", "build.gradle", "source.unlisted" };
@@ -224,6 +225,30 @@ namespace Ferry
             Require(content.Contains("```csharp") && content.Contains("```makefile") && content.Contains("```dockerfile"), "language fences missing");
             Require(content.Contains("```\n// source 日本語: source.unlisted".Replace("\n", Environment.NewLine)), "unknown source needs plain fence");
             Require(FolderCatalog.PickerPattern("markdown") == "*", "picker still hides source/extensionless files");
+        }
+
+        private static void TestMarkdownVisibility()
+        {
+            var input = Path.Combine(_root, "visibility");
+            Directory.CreateDirectory(input);
+            File.WriteAllText(Path.Combine(input, "visible.cs"), "// visible source\n");
+            var hiddenFile = Path.Combine(input, ".gitignore");
+            File.WriteAllText(hiddenFile, "bin/\nobj/\n");
+            var hiddenDirectory = Directory.CreateDirectory(Path.Combine(input, ".hidden"));
+            File.WriteAllText(Path.Combine(hiddenDirectory.FullName, "inside.cs"), "// hidden source\n");
+            if (PlatformInfo.IsWindows)
+            {
+                Require(FolderCatalog.Inspect(input).Files.Any(f => f.Name == ".gitignore"), "Windows dotfile without Hidden attribute disappeared");
+                File.SetAttributes(hiddenFile, File.GetAttributes(hiddenFile) | FileAttributes.Hidden);
+                hiddenDirectory.Attributes |= FileAttributes.Hidden;
+            }
+            var folder = FolderCatalog.Inspect(input);
+            Require(folder.Files.Count == 1 && folder.Files[0].Name == "visible.cs", "hidden entries leaked into folder listing");
+            var explicitFile = FolderCatalog.InspectFiles(new[] { hiddenFile });
+            Require(explicitFile.Files.Count == 1 && explicitFile.Files[0].MarkdownSupported && explicitFile.Files[0].Kind == "Text", "explicit hidden text selection rejected");
+            var result = MarkdownService.Convert(explicitFile, new[] { ".gitignore" }, true, Path.Combine(_root, "markdown-hidden"));
+            Require(result.ConvertedCount == 1 && result.Failures.Count == 0 && result.FilesWritten == 1, "explicit hidden text conversion failed");
+            Require(File.ReadAllText(result.OutputPath).Contains("bin/" + Environment.NewLine + "obj/"), "explicit hidden text content lost");
         }
 
         private static void TestMarkdownEncodings()

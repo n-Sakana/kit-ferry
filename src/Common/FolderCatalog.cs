@@ -193,8 +193,7 @@ namespace Ferry
 
             foreach (var file in currentFiles)
             {
-                if (!ShouldShow(file) && !(file.Name.StartsWith(".", StringComparison.Ordinal)
-                    && SupportsMarkdown(file.FullName)))
+                if (!ShouldShow(file))
                 {
                     continue;
                 }
