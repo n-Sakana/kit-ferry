@@ -140,6 +140,83 @@ namespace Ferry
                 failures);
         }
 
+        private static void AppendContent(StringBuilder builder, FolderFile file, ExtractResult result)
+        {
+            var content = result.Content.TrimEnd('\r', '\n');
+            // Keep documents and the existing prose/table formats as Markdown.
+            if (result.Method != "text" || file.Extension == ".txt" || file.Extension == ".md"
+                || file.Extension == ".markdown" || file.Extension == ".csv"
+                || file.Extension == ".tsv" || file.Extension == ".log")
+            {
+                builder.AppendLine(content);
+                return;
+            }
+
+            // A source file may itself contain Markdown fences (or raw string
+            // literals containing them). Its enclosing fence must be longer.
+            var longest = 2;
+            var run = 0;
+            foreach (var c in content)
+            {
+                run = c == '`' ? run + 1 : 0;
+                longest = Math.Max(longest, run);
+            }
+            var fence = new string('`', longest + 1);
+            builder.Append(fence).AppendLine(CodeLanguage(file));
+            builder.AppendLine(content);
+            builder.AppendLine(fence);
+        }
+
+        private static string CodeLanguage(FolderFile file)
+        {
+            // This map labels code; it never restricts which text files can enter.
+            switch (file.Extension)
+            {
+                case ".cs": case ".csx": return "csharp";
+                case ".c": case ".h": return "c";
+                case ".cpp": case ".cc": case ".cxx": case ".hpp": case ".hxx": case ".hh": return "cpp";
+                case ".java": return "java";
+                case ".rs": return "rust";
+                case ".go": return "go";
+                case ".rb": case ".rake": return "ruby";
+                case ".php": return "php";
+                case ".swift": return "swift";
+                case ".kt": case ".kts": return "kotlin";
+                case ".sh": case ".bash": case ".zsh": return "bash";
+                case ".toml": return "toml";
+                case ".vb": case ".vbs": case ".bas": return "vb";
+                case ".fs": case ".fsx": case ".fsi": return "fsharp";
+                case ".lua": return "lua";
+                case ".r": return "r";
+                case ".css": return "css";
+                case ".scss": return "scss";
+                case ".sass": return "sass";
+                case ".less": return "less";
+                case ".vue": return "vue";
+                case ".gradle": case ".groovy": return "groovy";
+                case ".json": case ".jsonc": return "json";
+                case ".xml": case ".csproj": case ".fsproj": case ".vbproj": case ".xaml": case ".svg": return "xml";
+                case ".html": case ".htm": return "html";
+                case ".yaml": case ".yml": return "yaml";
+                case ".js": case ".mjs": case ".cjs": return "javascript";
+                case ".jsx": return "jsx";
+                case ".ts": case ".mts": case ".cts": return "typescript";
+                case ".tsx": return "tsx";
+                case ".py": case ".pyw": return "python";
+                case ".ps1": case ".psm1": case ".psd1": return "powershell";
+                case ".bat": case ".cmd": return "bat";
+                case ".sql": return "sql";
+                case ".ini": case ".cfg": case ".conf": return "ini";
+                case ".mk": return "makefile";
+            }
+            switch (Path.GetFileName(file.Name).ToLowerInvariant())
+            {
+                case "makefile": case "gnumakefile": return "makefile";
+                case "dockerfile": case "containerfile": return "dockerfile";
+                default: return string.Empty;
+            }
+        }
+
         private static MarkdownConversionResult WriteSeparate(
             FolderSnapshot source,
             List<FolderFile> files)
