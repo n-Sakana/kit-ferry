@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace Ferry
@@ -38,6 +39,10 @@ namespace Ferry
                 Run("file selection rejects duplicates and traversal", TestSelection);
                 Run("parallel output directories are unique", TestOutputDirectories);
                 Run("plain-text Markdown conversion", TestMarkdown);
+                Run("source files and extensionless text Markdown conversion", TestMarkdownSources);
+                Run("BOM and CP932 source text", TestMarkdownEncodings);
+                Run("binary and invalid text excluded from Markdown", TestMarkdownBinary);
+                Run("text validation at export and safe code fences", TestMarkdownFences);
                 Console.WriteLine("PASS: " + _passed + " backend tests");
                 return 0;
             }
@@ -195,6 +200,87 @@ namespace Ferry
         {
             var converted = MarkdownService.Convert(_source, new[] { "note.txt" }, true, Path.Combine(_root, "markdown"));
             Require(File.Exists(converted.OutputPath) && File.ReadAllText(converted.OutputPath).Contains("Ferry regression 日本語"), "plain text conversion failed");
+        }
+
+        private static void TestMarkdownSources()
+        {
+            var input = Path.Combine(_root, "sources");
+            Directory.CreateDirectory(input);
+            var names = new[] { "Program.cs", "Makefile", "Dockerfile", "LICENSE", ".gitignore",
+                "main.c", "main.cpp", "main.h", "main.hpp", "main.java", "main.rs", "main.go",
+                "main.rb", "main.php", "main.swift", "main.kt", "main.sh", "config.toml", "main.vb",
+                "main.fs", "main.lua", "main.r", "main.scss", "main.vue", "build.gradle", "source.unlisted" };
+            foreach (var name in names) File.WriteAllText(Path.Combine(input, name), "// source 日本語: " + name + "\n");
+            var snapshot = FolderCatalog.Inspect(input);
+            foreach (var name in names)
+            {
+                var file = snapshot.Files.SingleOrDefault(f => f.Name == name);
+                Require(file != null && file.MarkdownSupported && file.Kind == "Text", "source missing/not Text: " + name);
+                Require(FolderCatalog.SupportsMarkdown(Path.Combine(input, name)), "direct selection rejected: " + name);
+            }
+            var converted = MarkdownService.Convert(snapshot, names, true, Path.Combine(_root, "markdown-sources"));
+            Require(converted.ConvertedCount == names.Length && converted.Failures.Count == 0 && converted.OutputCount == 1, "sources not combined");
+            var content = File.ReadAllText(converted.OutputPath);
+            Require(content.Contains("```csharp") && content.Contains("```makefile") && content.Contains("```dockerfile"), "language fences missing");
+            Require(content.Contains("```\n// source 日本語: source.unlisted".Replace("\n", Environment.NewLine)), "unknown source needs plain fence");
+            Require(FolderCatalog.PickerPattern("markdown") == "*", "picker still hides source/extensionless files");
+        }
+
+        private static void TestMarkdownEncodings()
+        {
+            var input = Path.Combine(_root, "encodings");
+            Directory.CreateDirectory(input);
+            // Fixed bytes for // 日本語\r\n, independent of the runtime's code-page provider.
+            File.WriteAllBytes(Path.Combine(input, "cp932.cs"), new byte[] { 47, 47, 32, 0x93, 0xfa, 0x96, 0x7b, 0x8c, 0xea, 13, 10 });
+            File.WriteAllText(Path.Combine(input, "utf8.cs"), "// 日本語\n", new UTF8Encoding(true));
+            File.WriteAllText(Path.Combine(input, "utf16.cs"), "// 日本語\n", Encoding.Unicode);
+            File.WriteAllText(Path.Combine(input, "utf16be.cs"), "// 日本語\n", Encoding.BigEndianUnicode);
+            // A multibyte character crosses the catalogue probe boundary.
+            File.WriteAllText(Path.Combine(input, "boundary.cs"), new string(' ', 8191) + "日本語\n", new UTF8Encoding(false));
+            var snapshot = FolderCatalog.Inspect(input);
+            Require(snapshot.Files.All(f => f.MarkdownSupported), "encoded source rejected");
+            var result = MarkdownService.Convert(snapshot, snapshot.Files.Select(f => f.Name).ToArray(), true, Path.Combine(_root, "markdown-encodings"));
+            Require(result.ConvertedCount == 5 && result.Failures.Count == 0, "encoded sources failed");
+            var content = File.ReadAllText(result.OutputPath);
+            Require(content.Split(new[] { "日本語" }, StringSplitOptions.None).Length == 6 && !content.Contains("\ufffd"), "Japanese text corrupted");
+        }
+
+        private static void TestMarkdownBinary()
+        {
+            var input = Path.Combine(_root, "binary");
+            Directory.CreateDirectory(input);
+            File.WriteAllBytes(Path.Combine(input, "image.png"), Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6V8AAAAASUVORK5CYII="));
+            File.Copy(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "zxing.dll"), Path.Combine(input, "program.exe"));
+            File.Copy(Path.Combine(input, "program.exe"), Path.Combine(input, "renamed.cs"));
+            File.WriteAllBytes(Path.Combine(input, "nul.txt"), new byte[] { 65, 0, 66 });
+            File.WriteAllBytes(Path.Combine(input, "invalid.cs"), new byte[] { 0xef, 0xbb, 0xbf, 0xff });
+            File.WriteAllBytes(Path.Combine(input, "invalid-utf16.cs"), new byte[] { 0xff, 0xfe, 0x00, 0xd8 });
+            File.WriteAllBytes(Path.Combine(input, "truncated-cp932.cs"), new byte[] { 0x82 });
+            var snapshot = FolderCatalog.Inspect(input);
+            foreach (var file in snapshot.Files)
+            {
+                Require(!file.MarkdownSupported && !FolderCatalog.SupportsMarkdown(file.FullPath), "binary admitted: " + file.Name);
+                Throws<ArgumentException>(delegate { MarkdownService.Convert(snapshot, new[] { file.Name }, true, Path.Combine(_root, "binary-output")); });
+            }
+        }
+
+        private static void TestMarkdownFences()
+        {
+            var input = Path.Combine(_root, "fences");
+            Directory.CreateDirectory(input);
+            const string code = "var sample = \"\"\"\n```\n# must stay inside code\n\"\"\";";
+            File.WriteAllText(Path.Combine(input, "code.cs"), code);
+            File.WriteAllText(Path.Combine(input, "README.md"), "# Keep Markdown\n");
+            File.WriteAllText(Path.Combine(input, "changed.cs"), "class Before {}\n");
+            File.WriteAllText(Path.Combine(input, "late-binary.cs"), new string('a', 20000) + "\0BINARY_SENTINEL");
+            var snapshot = FolderCatalog.Inspect(input);
+            File.WriteAllBytes(Path.Combine(input, "changed.cs"), new byte[] { 65, 0, 66 });
+            var result = MarkdownService.Convert(snapshot, snapshot.Files.Select(f => f.Name).ToArray(), true, Path.Combine(_root, "markdown-fences"));
+            Require(result.ConvertedCount == 2 && result.Failures.Count == 2, "export did not reject binary after probe");
+            var content = File.ReadAllText(result.OutputPath);
+            Require(content.Contains("````csharp" + Environment.NewLine + code + Environment.NewLine + "````"), "embedded fence broke code");
+            Require(content.Contains("## README.md" + Environment.NewLine + Environment.NewLine + "# Keep Markdown"), "Markdown formatting changed");
+            Require(!content.Contains("BINARY_SENTINEL") && !content.Contains("\0"), "binary leaked into Markdown");
         }
     }
 }
