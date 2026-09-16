@@ -405,6 +405,20 @@
     <p class="qr-hint">受信側では白い余白まで QR 全体を映してください。中央に固定する必要はありません。</p>
   </section>
 
+  <dialog class="camera-help-dialog markdown-large-dialog" id="markdownLargeDialog" aria-labelledby="markdownLargeTitle">
+    <form method="dialog">
+      <button class="markdown-large-close" value="cancel" aria-label="書き出しをやめて戻る">×</button>
+      <h2 id="markdownLargeTitle">大きいファイルが含まれています</h2>
+      <p id="markdownLargeTotal"></p>
+      <ul class="markdown-large-list" id="markdownLargeFiles"></ul>
+      <p>まとめて本文から外しますか。そのまま含めますか。外した場合も、名前は「対象外」に残ります。</p>
+      <div class="actions">
+        <button value="exclude" autofocus>外す</button>
+        <button class="primary" value="include">そのまま</button>
+      </div>
+    </form>
+  </dialog>
+
   <div class="info-tooltip" id="infoTooltip" role="tooltip" hidden></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 

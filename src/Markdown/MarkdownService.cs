@@ -9,6 +9,8 @@ namespace Ferry
 {
     internal static class MarkdownService
     {
+        internal const long LargeFileBytes = 1000000;
+
         public static MarkdownConversionResult Convert(
             FolderSnapshot source,
             IList<string> selectedNames,
@@ -23,10 +25,11 @@ namespace Ferry
             IList<string> selectedNames,
             bool combine,
             string outputRoot,
-            FileProgressHandler progress)
+            FileProgressHandler progress,
+            bool excludeLargeFiles = false)
         {
             var files = ResolveSelectedFiles(source, selectedNames);
-            return WriteCombined(source, files, outputRoot, progress);
+            return WriteCombined(source, files, outputRoot, progress, excludeLargeFiles);
         }
 
         internal static bool CanWriteOnlyOmissions(FolderSnapshot source)
@@ -100,7 +103,8 @@ namespace Ferry
             FolderSnapshot source,
             List<FolderFile> files,
             string outputRoot,
-            FileProgressHandler progress)
+            FileProgressHandler progress,
+            bool excludeLargeFiles)
         {
             var outputDirectory = OutputLayout.CreateRunDirectory(outputRoot, source);
             var outputPath = FindAvailableFile(Path.Combine(
@@ -113,7 +117,11 @@ namespace Ferry
             {
                 if (!file.MarkdownSupported) omissions.Add(file, file.MarkdownExclusionReason);
                 else if (!selected.Contains(file)) omissions.Add(file, "未選択");
+                else if (excludeLargeFiles && file.Size > LargeFileBytes)
+                    omissions.Add(file, "大きいファイル（1 MB 超・まとめて除外）");
             }
+            if (excludeLargeFiles)
+                files = files.FindAll(delegate (FolderFile file) { return file.Size <= LargeFileBytes; });
             var builder = new StringBuilder();
             builder.Append("# ");
             builder.AppendLine(EscapeHeading(SourceTitle(source, files)));

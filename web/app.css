@@ -1497,6 +1497,19 @@ button.text-button {
   margin-top: 14px;
 }
 
+.markdown-large-dialog { width: min(92vw, 560px); }
+.markdown-large-dialog h2 { padding-right: 28px; }
+.markdown-large-dialog .markdown-large-close {
+  position: absolute; top: 6px; right: 10px; margin: 0; padding: 2px 8px;
+  border: 0; background: transparent; color: var(--secondary); font-size: 20px;
+}
+.markdown-large-dialog .markdown-large-list {
+  max-height: 40vh; overflow-y: auto; padding: 0; list-style: none;
+}
+.markdown-large-list li { display: flex; gap: 16px; justify-content: space-between; }
+.markdown-large-list .large-file-name { overflow-wrap: anywhere; }
+.markdown-large-list .large-file-size { flex-shrink: 0; }
+
 .camera-actual {
   overflow: visible;
   text-overflow: clip;

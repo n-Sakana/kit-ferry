@@ -899,16 +899,18 @@
 
     var button = document.getElementById("convertMarkdown");
     state.markdownBusy = true;
-    clearMarkdownResult();
     updateMarkdownAction();
-    button.setAttribute("aria-busy", "true");
-    button.textContent = "Markdown 化しています…";
 
     try {
+      var excludeLargeFiles = await chooseLargeMarkdownFiles();
+      if (excludeLargeFiles === null) { return; }
+      clearMarkdownResult();
+      button.setAttribute("aria-busy", "true");
+      button.textContent = "Markdown 化しています…";
       var result = await requestJson("/api/markdown", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ files: files, combine: true })
+        body: JSON.stringify({ files: files, combine: true, excludeLargeFiles: excludeLargeFiles })
       });
 
       var resultRow = document.getElementById("markdownResult");
@@ -936,6 +938,35 @@
       button.textContent = "Markdown にする";
       updateMarkdownAction();
     }
+  }
+
+  function chooseLargeMarkdownFiles() {
+    var folder = state.folders.markdown;
+    var large = folder.files.filter(function (file) {
+      return file.markdownSupported && state.selections.markdown.has(file.name)
+        && file.size > state.status.markdownLargeFileBytes;
+    });
+    if (large.length === 0) { return Promise.resolve(false); }
+    var dialog = document.getElementById("markdownLargeDialog");
+    var list = document.getElementById("markdownLargeFiles");
+    list.replaceChildren();
+    var total = 0;
+    large.forEach(function (file) {
+      var row = document.createElement("li");
+      row.appendChild(textCell(file.name, "large-file-name"));
+      row.appendChild(textCell(formatBytes(file.size), "large-file-size mono"));
+      list.appendChild(row);
+      total += file.size;
+    });
+    document.getElementById("markdownLargeTotal").textContent =
+      "1 MB を超えるファイルが " + large.length + " 件、合計 " + formatBytes(total) + " あります。";
+    dialog.returnValue = "";
+    return new Promise(function (resolve) {
+      dialog.addEventListener("close", function () {
+        resolve(dialog.returnValue === "exclude" ? true : dialog.returnValue === "include" ? false : null);
+      }, { once: true });
+      dialog.showModal();
+    });
   }
 
   function updateMarkdownAction() {

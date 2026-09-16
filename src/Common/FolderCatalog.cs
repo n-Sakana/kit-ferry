@@ -24,8 +24,8 @@ namespace Ferry
         private static readonly HashSet<string> MarkdownExcludedExtensions =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                ".jsonl", ".svg", ".trx", ".lock", ".sha256", ".sha512",
-                ".metadata", ".map", ".patch", ".diff", ".bak"
+                ".svg", ".trx", ".lock", ".sha256", ".sha512",
+                ".metadata", ".map", ".bak"
             };
 
         public static FolderSnapshot Inspect(string path)

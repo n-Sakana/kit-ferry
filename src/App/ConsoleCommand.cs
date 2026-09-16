@@ -42,6 +42,8 @@ namespace Ferry
                 if (mode == "markdown")
                 {
                     var names = FileNames(files);
+                    var excludeLargeFiles = ChooseLargeFileAction(files);
+                    if (!excludeLargeFiles.HasValue) return 0;
                     var task = Task.Run(delegate
                     {
                         return MarkdownService.Convert(
@@ -49,7 +51,8 @@ namespace Ferry
                             names,
                             true,
                             outputRoot,
-                            progress.Report);
+                            progress.Report,
+                            excludeLargeFiles.Value);
                     });
                     var result = progress.Wait(task);
                     outputPath = result.OutputPath;
@@ -192,6 +195,36 @@ namespace Ferry
                 Console.Write(folderPath);
                 Console.Write("\u001b]8;;\u001b\\");
                 Console.WriteLine();
+            }
+        }
+
+        private static bool? ChooseLargeFileAction(List<FolderFile> files)
+        {
+            var large = files.FindAll(delegate (FolderFile file) { return file.Size > MarkdownService.LargeFileBytes; });
+            if (large.Count == 0) return false;
+            long total = 0;
+            Console.WriteLine();
+            Console.WriteLine("Files larger than 1 MB:");
+            foreach (var file in large)
+            {
+                Console.WriteLine("  {0}  {1}", OneLine(file.Name), FormatSize(file.Size));
+                total += file.Size;
+            }
+            Console.WriteLine("Total: {0} file(s), {1}", large.Count, FormatSize(total));
+            if (Console.IsInputRedirected)
+            {
+                Console.WriteLine("No interactive input: excluding these files (names will be listed).");
+                return true;
+            }
+            Console.Write("[1/Enter] Exclude all  [2] Include all  [Esc] Cancel: ");
+            while (true)
+            {
+                var key = Console.ReadKey(true).Key;
+                if (key == ConsoleKey.Escape) { Console.WriteLine("Cancelled"); return null; }
+                if (key == ConsoleKey.D1 || key == ConsoleKey.NumPad1 || key == ConsoleKey.Enter)
+                { Console.WriteLine("Exclude all"); return true; }
+                if (key == ConsoleKey.D2 || key == ConsoleKey.NumPad2)
+                { Console.WriteLine("Include all"); return false; }
             }
         }
 

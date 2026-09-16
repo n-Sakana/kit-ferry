@@ -592,7 +592,9 @@ namespace Ferry
                         snapshot,
                         selectedNames,
                         combine,
-                        _outputRoot);
+                        _outputRoot,
+                        null,
+                        ReadOptionalBool(body, "excludeLargeFiles", true));
                 });
                 _state.RememberOutput("markdown", result.OutputPath);
                 _state.ClearSelection("markdown");
@@ -952,6 +954,7 @@ namespace Ferry
             {
                 Device = Environment.MachineName,
                 ProcessId = GetCurrentProcessId(),
+                MarkdownLargeFileBytes = MarkdownService.LargeFileBytes,
                 Platform = PlatformInfo.Name,
                 Role = role,
                 Version = version == null ? "0.0.0" : version.ToString(3),
