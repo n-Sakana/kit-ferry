@@ -50,6 +50,7 @@ namespace Ferry
                 Run("Markdown lists omissions and their reasons", TestMarkdownOmissions);
                 Run("Markdown can write only omissions without changing selection rules", TestMarkdownOnlyOmissions);
                 Run("large omission lists preserve every relative path", TestMarkdownManyOmissions);
+                Run("large Markdown files can be excluded together or included", TestMarkdownLargeFiles);
                 Console.WriteLine("PASS: " + _passed + " backend tests");
                 return 0;
             }
@@ -313,11 +314,11 @@ namespace Ferry
         private static void TestMarkdownExcludedExtensions()
         {
             var input = Directory.CreateDirectory(Path.Combine(_root, "excluded-extensions")).FullName;
-            var excluded = new[] { "events.jsonl", "icon.svg", "test.TRX", "yarn.lock", "file.sha256",
-                "file.sha512", "build.metadata", "app.js.map", "changes.patch", "changes.diff",
+            var excluded = new[] { "icon.svg", "test.TRX", "yarn.lock", "file.sha256",
+                "file.sha512", "build.metadata", "app.js.map",
                 "source.cs.bak", "source.cs.bak-20260912-sora", "source.cs.bak_20260912" };
             var included = new[] { "Program.cs", "Makefile", "source.unknown", "app.log", "data.csv",
-                "data.tsv", "config.json", "source.locksmith", "source.bakery" };
+                "data.tsv", "config.json", "events.jsonl", "changes.patch", "changes.diff", "source.locksmith", "source.bakery" };
             foreach (var name in excluded.Concat(included)) File.WriteAllText(Path.Combine(input, name), "TEXT_BODY_SENTINEL\n");
             var snapshot = FolderCatalog.Inspect(input);
             foreach (var name in excluded)
@@ -390,14 +391,37 @@ namespace Ferry
         {
             var input = Directory.CreateDirectory(Path.Combine(_root, "many-omissions")).FullName;
             File.WriteAllText(Path.Combine(input, "Program.cs"), "class Included {}");
-            for (var i = 0; i < 120; i++) File.WriteAllText(Path.Combine(input, "trace-" + i + ".jsonl"), "EXCLUDED_BODY_SENTINEL");
+            for (var i = 0; i < 120; i++) File.WriteAllText(Path.Combine(input, "icon-" + i + ".svg"), "EXCLUDED_BODY_SENTINEL");
             File.WriteAllText(Path.Combine(input, "a&b`[x].svg"), "EXCLUDED_BODY_SENTINEL");
             var result = MarkdownService.Convert(FolderCatalog.Inspect(input), new[] { "Program.cs" }, true, Path.Combine(_root, "markdown-many"));
             var content = File.ReadAllText(result.OutputPath);
             Require(content.Contains("<details>") && content.Contains("121 件") && content.Contains("</details>"), "large list not folded");
-            for (var i = 0; i < 120; i++) Require(content.Contains("trace-" + i + ".jsonl</code>"), "omission list truncated: " + i);
+            for (var i = 0; i < 120; i++) Require(content.Contains("icon-" + i + ".svg</code>"), "omission list truncated: " + i);
             Require(content.Contains("a&amp;b&#96;&#91;x&#93;.svg"), "path markup not escaped");
             Require(!content.Contains("BODY_SENTINEL"), "excluded content leaked into large report");
+        }
+
+        private static void TestMarkdownLargeFiles()
+        {
+            var input = Directory.CreateDirectory(Path.Combine(_root, "large-text")).FullName;
+            var names = new[] { "small.jsonl", "boundary.jsonl", "large.jsonl", "large.log" };
+            File.WriteAllText(Path.Combine(input, names[0]), "SMALL_JSONL", new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(input, names[1]), new string('a', 1000000), new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(input, names[2]), "LARGE_JSONL_BODY" + new string('b', 1000000), new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(input, names[3]), "LARGE_LOG_BODY" + new string('c', 1000000), new UTF8Encoding(false));
+            var snapshot = FolderCatalog.Inspect(input);
+            Require(snapshot.Files.All(f => f.MarkdownSupported), "large text disappeared before user choice");
+            var excluded = MarkdownService.Convert(snapshot, names, true, Path.Combine(_root, "large-exclude"), null, true);
+            var content = File.ReadAllText(excluded.OutputPath);
+            Require(excluded.ConvertedCount == 2 && excluded.FailedCount == 0, "bulk size exclusion boundary/count wrong");
+            Require(content.Contains("SMALL_JSONL") && content.Contains("## boundary.jsonl"), "small or exactly 1 MB text omitted");
+            Require(content.Contains("large.jsonl</code> | 大きいファイル（1 MB 超・まとめて除外）")
+                && content.Contains("large.log</code> | 大きいファイル（1 MB 超・まとめて除外）"), "size exclusion reasons missing");
+            Require(!content.Contains("LARGE_JSONL_BODY") && !content.Contains("LARGE_LOG_BODY"), "excluded large contents leaked");
+            var included = MarkdownService.Convert(snapshot, names, true, Path.Combine(_root, "large-include"), null, false);
+            content = File.ReadAllText(included.OutputPath);
+            Require(included.ConvertedCount == 4 && included.FailedCount == 0
+                && content.Contains("LARGE_JSONL_BODY") && content.Contains("LARGE_LOG_BODY"), "include-all was not respected");
         }
 
         private static void TestMarkdownFences()
