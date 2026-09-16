@@ -218,7 +218,7 @@ namespace Ferry
 
                 try
                 {
-                    files.Add(Describe(file, RelativeName(root.FullName, file.FullName)));
+                    files.Add(Describe(file, RelativeName(root.FullName, file.FullName), true));
                 }
                 catch (FileNotFoundException)
                 {
@@ -284,10 +284,13 @@ namespace Ferry
                 .Replace(Path.AltDirectorySeparatorChar, '/');
         }
 
-        private static FolderFile Describe(FileInfo file, string name)
+        private static FolderFile Describe(FileInfo file, string name, bool fromFolder = false)
         {
             var extension = file.Extension.ToLowerInvariant();
-            var markdownExclusion = MarkdownExclusionFor(file.FullName);
+            // Windows dotfiles may lack the Hidden attribute. Keep their names
+            // in the catalogue, but do not ingest them implicitly as Markdown.
+            var markdownExclusion = fromFolder && file.Name.StartsWith(".", StringComparison.Ordinal)
+                ? "隠しファイル" : MarkdownExclusionFor(file.FullName);
             return new FolderFile(
                 file.FullName,
                 name,

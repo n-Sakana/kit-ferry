@@ -246,6 +246,13 @@ namespace Ferry
             if (PlatformInfo.IsWindows)
             {
                 Require(FolderCatalog.Inspect(input).Files.Any(f => f.Name == ".gitignore"), "Windows dotfile without Hidden attribute disappeared");
+                var windowsFolder = FolderCatalog.Inspect(input);
+                Require(!windowsFolder.Files.Single(f => f.Name == ".gitignore").MarkdownSupported,
+                    "Windows dotfile leaked into Markdown candidates");
+                var windowsResult = MarkdownService.Convert(windowsFolder, new[] { "visible.cs" }, true, Path.Combine(_root, "markdown-windows-hidden"));
+                var windowsContent = File.ReadAllText(windowsResult.OutputPath);
+                Require(windowsContent.Contains(".gitignore</code> | 隠しファイル") && !windowsContent.Contains("bin/"),
+                    "Windows dotfile must retain only its name in the report");
                 File.SetAttributes(hiddenFile, File.GetAttributes(hiddenFile) | FileAttributes.Hidden);
                 hiddenDirectory.Attributes |= FileAttributes.Hidden;
             }
