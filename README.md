@@ -41,6 +41,18 @@ pwsh -NoProfile -File ./ferry.ps1 --no-browser
 Windows で WPF の窓を出さず HTTP サーバだけを起動する場合は `--no-browser`、開始画面を
 指定する場合は `--mode optical|markdown|vba` を使います。
 
+## ソースファイルの Markdown 化
+
+`.cs`・`.cpp`・`.rs` などのソース、未知の拡張子のテキスト、`Makefile`・`Dockerfile`・`LICENSE`・
+`.gitignore` も対象です。フォルダまたはファイルを選び、同じ「書き出す」ボタンから1枚の Markdown にまとめます。
+コードには言語名付きのコードフェンスを付け、言語が分からない場合は言語名を省きます。
+従来の Markdown・プレーンテキスト・CSV 等と PDF・Office の出力形式は維持します。
+
+一覧では先頭 8 KiB を復号してテキストか判定し、書き出し時には全文を再検査します。
+BOM 付き UTF-8 / UTF-16、BOM なし UTF-8、CP932 を読み取り、不正なバイト列や NUL・制御文字
+（タブ・改行・改ページを除く）があれば除外します。PNG・実行ファイル・書庫などをテキストとして
+書き出しません。隠しディレクトリの再帰探索は従来どおり行いません。
+
 ## Tailnet からリモコンを開く
 
 `your-ferry-host` では Tailscale Serve の HTTPS `10000` を Ferry の既定ポートへ転送します。
