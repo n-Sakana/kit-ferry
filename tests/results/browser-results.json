@@ -1,170 +1,170 @@
 {
-  "transport": "localhost HTTP",
+  "transport": "in-memory local assets",
   "kind": "synthetic browser and mocked API tests; not physical-camera or modified-C# tests",
   "cases": [
     {
       "name": "center",
       "old": {
         "success": true,
-        "ms": 18.6
+        "ms": 56.4
       },
       "new": {
         "success": true,
-        "ms": 8
+        "ms": 25.2
       }
     },
     {
       "name": "top_left",
       "old": {
         "success": true,
-        "ms": 8.7
+        "ms": 18.1
       },
       "new": {
         "success": true,
-        "ms": 5.3
+        "ms": 9.2
       }
     },
     {
       "name": "top_right",
       "old": {
         "success": true,
-        "ms": 9.5
+        "ms": 20.1
       },
       "new": {
         "success": true,
-        "ms": 5.1
+        "ms": 9
       }
     },
     {
       "name": "bottom_left",
       "old": {
         "success": true,
-        "ms": 7.9
+        "ms": 14.7
       },
       "new": {
         "success": true,
-        "ms": 5.3
+        "ms": 11.7
       }
     },
     {
       "name": "bottom_right",
       "old": {
         "success": true,
-        "ms": 7.5
+        "ms": 14.5
       },
       "new": {
         "success": true,
-        "ms": 4.7
+        "ms": 9.4
       }
     },
     {
       "name": "off_center",
       "old": {
         "success": true,
-        "ms": 7.1
+        "ms": 12.7
       },
       "new": {
         "success": true,
-        "ms": 4.7
+        "ms": 9.1
       }
     },
     {
       "name": "rotate_15",
       "old": {
         "success": true,
-        "ms": 7.4
+        "ms": 15.3
       },
       "new": {
         "success": true,
-        "ms": 4.6
+        "ms": 9.1
       }
     },
     {
       "name": "rotate_30",
       "old": {
         "success": true,
-        "ms": 8.4
+        "ms": 13.7
       },
       "new": {
         "success": true,
-        "ms": 5.5
+        "ms": 9.8
       }
     },
     {
       "name": "perspective",
       "old": {
         "success": true,
-        "ms": 8.4
+        "ms": 15.1
       },
       "new": {
         "success": true,
-        "ms": 6.2
+        "ms": 8.8
       }
     },
     {
       "name": "blur_08",
       "old": {
         "success": true,
-        "ms": 7.7
+        "ms": 14.2
       },
       "new": {
         "success": true,
-        "ms": 5
+        "ms": 9.4
       }
     },
     {
       "name": "blur_12",
       "old": {
         "success": false,
-        "ms": 10
+        "ms": 18.6
       },
       "new": {
         "success": true,
-        "ms": 4.5
+        "ms": 8.9
       }
     },
     {
       "name": "small_300",
       "old": {
         "success": true,
-        "ms": 7
+        "ms": 13.5
       },
       "new": {
         "success": true,
-        "ms": 4.5
+        "ms": 8.7
       }
     },
     {
       "name": "small_250",
       "old": {
         "success": true,
-        "ms": 7.2
+        "ms": 13.5
       },
       "new": {
         "success": true,
-        "ms": 4.7
+        "ms": 8.6
       }
     },
     {
       "name": "small_200",
       "old": {
         "success": false,
-        "ms": 6.2
+        "ms": 14.2
       },
       "new": {
         "success": true,
-        "ms": 4.5
+        "ms": 12.2
       }
     },
     {
       "name": "multiple_qr",
       "old": {
         "success": true,
-        "ms": 7.1
+        "ms": 14
       },
       "new": {
         "success": true,
-        "ms": 4.9
+        "ms": 10.8
       }
     }
   ],
@@ -234,7 +234,7 @@
       "passed": true
     }
   ],
-  "browser": "153.0.8010.36",
+  "browser": "144.0.7559.96",
   "roi_benchmark": {
     "region": {
       "x": 0,
@@ -247,8 +247,8 @@
     "roi_pixels": 503118,
     "samples": 15,
     "median_ms": {
-      "old_full": 5.3,
-      "new_roi": 2.6
+      "old_full": 10.0,
+      "new_roi": 5.0
     }
   },
   "ui_page_errors": [],
