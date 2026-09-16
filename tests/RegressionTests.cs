@@ -43,6 +43,7 @@ namespace Ferry
                 Run("hidden entries stay hidden while explicit text selection works", TestMarkdownVisibility);
                 Run("source files and extensionless text Markdown conversion", TestMarkdownSources);
                 Run("BOM and CP932 source text", TestMarkdownEncodings);
+                Run("source text keeps LF and CRLF line endings", TestMarkdownLineEndings);
                 Run("binary and invalid text excluded from Markdown", TestMarkdownBinary);
                 Run("text validation at export and safe code fences", TestMarkdownFences);
                 Run("Markdown ignores generated text and backup suffixes", TestMarkdownExcludedExtensions);
@@ -238,7 +239,7 @@ namespace Ferry
             Directory.CreateDirectory(input);
             File.WriteAllText(Path.Combine(input, "visible.cs"), "// visible source\n");
             var hiddenFile = Path.Combine(input, ".gitignore");
-            File.WriteAllText(hiddenFile, "bin/\nobj/\n");
+            File.WriteAllText(hiddenFile, "bin/" + Environment.NewLine + "obj/" + Environment.NewLine);
             var hiddenDirectory = Directory.CreateDirectory(Path.Combine(input, ".hidden"));
             File.WriteAllText(Path.Combine(hiddenDirectory.FullName, "inside.cs"), "// hidden source\n");
             if (PlatformInfo.IsWindows)
@@ -273,6 +274,19 @@ namespace Ferry
             Require(result.ConvertedCount == 5 && result.Failures.Count == 0, "encoded sources failed");
             var content = File.ReadAllText(result.OutputPath);
             Require(content.Split(new[] { "日本語" }, StringSplitOptions.None).Length == 6 && !content.Contains("\ufffd"), "Japanese text corrupted");
+        }
+
+        private static void TestMarkdownLineEndings()
+        {
+            var input = Directory.CreateDirectory(Path.Combine(_root, "line-endings")).FullName;
+            const string lf = "// LF 日本語\nclass LF {}";
+            const string crlf = "// CRLF 日本語\r\nclass CRLF {}";
+            File.WriteAllText(Path.Combine(input, "lf.cs"), lf, new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(input, "crlf.cs"), crlf, new UTF8Encoding(false));
+            var snapshot = FolderCatalog.Inspect(input);
+            var result = MarkdownService.Convert(snapshot, new[] { "lf.cs", "crlf.cs" }, true, Path.Combine(_root, "markdown-line-endings"));
+            var content = File.ReadAllText(result.OutputPath);
+            Require(result.ConvertedCount == 2 && result.FailedCount == 0 && content.Contains(lf) && content.Contains(crlf), "source line endings changed");
         }
 
         private static void TestMarkdownBinary()
