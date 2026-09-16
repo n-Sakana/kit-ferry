@@ -29,6 +29,22 @@ namespace Ferry
             return WriteCombined(source, files, outputRoot, progress);
         }
 
+        internal static bool CanWriteOnlyOmissions(FolderSnapshot source)
+        {
+            return source != null && source.Files.Count > 0
+                && source.Files.TrueForAll(delegate (FolderFile file) { return !file.MarkdownSupported; });
+        }
+
+        internal static string ExclusionReason(ExtractResult result)
+        {
+            switch (result.FailureReason)
+            {
+                case ExtractFailureReason.Binary: return "バイナリまたは不正な文字コード";
+                case ExtractFailureReason.TooLarge: return "大きすぎる（既存の上限）";
+                default: return "変換に失敗した";
+            }
+        }
+
         private static List<FolderFile> ResolveSelectedFiles(
             FolderSnapshot source,
             IList<string> selectedNames)
@@ -37,7 +53,7 @@ namespace Ferry
             {
                 throw new ArgumentException("入力が選ばれていません。", "source");
             }
-            if (selectedNames == null || selectedNames.Count == 0)
+            if (selectedNames == null || (selectedNames.Count == 0 && !CanWriteOnlyOmissions(source)))
             {
                 throw new ArgumentException(
                     "Markdown にするファイルを1つ以上選んでください。",
@@ -91,6 +107,13 @@ namespace Ferry
                 outputDirectory,
                 Path.GetFileName(CombinedOutputPath(source, files))));
             var failures = new List<MarkdownFailure>();
+            var omissions = new Dictionary<FolderFile, string>();
+            var selected = new HashSet<FolderFile>(files);
+            foreach (var file in source.Files)
+            {
+                if (!file.MarkdownSupported) omissions.Add(file, file.MarkdownExclusionReason);
+                else if (!selected.Contains(file)) omissions.Add(file, "未選択");
+            }
             var builder = new StringBuilder();
             builder.Append("# ");
             builder.AppendLine(EscapeHeading(SourceTitle(source, files)));
@@ -103,17 +126,16 @@ namespace Ferry
                 {
                     progress(file, index + 1, files.Count, false);
                 }
-                builder.AppendLine();
-                builder.Append("## ");
-                builder.AppendLine(EscapeHeading(file.Name));
-                builder.AppendLine();
-
                 var result = Extract.FromFile(
                     file.FullPath,
                     file.Kind.ToLowerInvariant(),
                     file.Extension);
                 if (result.Succeeded)
                 {
+                    builder.AppendLine();
+                    builder.Append("## ");
+                    builder.AppendLine(EscapeHeading(file.Name));
+                    builder.AppendLine();
                     AppendContent(builder, file, result);
                     converted++;
                 }
@@ -122,8 +144,7 @@ namespace Ferry
                     var message = string.IsNullOrWhiteSpace(result.Notes)
                         ? "内容を読み取れませんでした。"
                         : result.Notes;
-                    builder.Append("> 変換できませんでした: ");
-                    builder.AppendLine(message.Replace("\r", " ").Replace("\n", " "));
+                    omissions[file] = ExclusionReason(result);
                     failures.Add(new MarkdownFailure(file.Name, message));
                 }
                 if (progress != null)
@@ -132,12 +153,52 @@ namespace Ferry
                 }
             }
 
+            AppendOmissions(builder, source, omissions);
             WriteUtf8Atomically(outputPath, builder.ToString());
             return new MarkdownConversionResult(
                 outputPath,
                 1,
                 converted,
                 failures);
+        }
+
+        private static void AppendOmissions(StringBuilder builder, FolderSnapshot source,
+            Dictionary<FolderFile, string> omissions)
+        {
+            if (omissions.Count == 0) return;
+            builder.AppendLine().AppendLine("## 対象外").AppendLine();
+            // Keep all names in the file; fold only their presentation for long lists.
+            var fold = omissions.Count > 50;
+            if (fold) builder.AppendLine("<details>").Append("<summary>")
+                .Append(omissions.Count).AppendLine(" 件（相対パスと理由）</summary>").AppendLine();
+            builder.AppendLine("| 相対パス | 理由 |").AppendLine("| --- | --- |");
+            foreach (var file in source.Files)
+            {
+                string reason;
+                if (!omissions.TryGetValue(file, out reason)) continue;
+                builder.Append("| <code>").Append(EscapeTablePath(file.Name))
+                    .Append("</code> | ").Append(reason).AppendLine(" |");
+            }
+            if (fold) builder.AppendLine().AppendLine("</details>");
+        }
+
+        private static string EscapeTablePath(string path)
+        {
+            var escaped = new StringBuilder();
+            foreach (var c in path)
+            {
+                switch (c)
+                {
+                    case '&': escaped.Append("&amp;"); break;
+                    case '<': escaped.Append("&lt;"); break;
+                    case '>': escaped.Append("&gt;"); break;
+                    case '|': case '`': case '[': case ']': case '*': case '_':
+                    case '\\': case '\r': case '\n':
+                        escaped.Append("&#").Append((int)c).Append(';'); break;
+                    default: escaped.Append(c); break;
+                }
+            }
+            return escaped.ToString();
         }
 
         private static void AppendContent(StringBuilder builder, FolderFile file, ExtractResult result)

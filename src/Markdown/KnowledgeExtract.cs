@@ -9,20 +9,30 @@ using System.Xml;
 
 namespace KnowledgeStudio
 {
+    public enum ExtractFailureReason { Conversion, Binary, TooLarge }
+
+    internal sealed class ExtractionSizeLimitException : IOException
+    {
+        public ExtractionSizeLimitException(string message) : base(message) { }
+    }
+
     public sealed class ExtractResult
     {
         public string Content;
         public string Method;
         public string Notes;
         public bool Succeeded;
+        public ExtractFailureReason FailureReason;
 
-        public static ExtractResult Failure(string method, string notes)
+        public static ExtractResult Failure(string method, string notes,
+            ExtractFailureReason reason = ExtractFailureReason.Conversion)
         {
             ExtractResult result = new ExtractResult();
             result.Content = string.Empty;
             result.Method = method;
             result.Notes = notes;
             result.Succeeded = false;
+            result.FailureReason = reason;
             return result;
         }
     }
@@ -89,6 +99,10 @@ namespace KnowledgeStudio
                             "テキスト抽出には対応していない種類です。");
                 }
             }
+            catch (ExtractionSizeLimitException ex)
+            {
+                return ExtractResult.Failure("error", ex.Message, ExtractFailureReason.TooLarge);
+            }
             catch (Exception ex)
             {
                 return ExtractResult.Failure(
@@ -101,6 +115,11 @@ namespace KnowledgeStudio
         // at export, so a binary tail or a file changed after selection cannot leak.
         public static bool IsTextFile(string path)
         {
+            return ProbeTextFile(path).Succeeded;
+        }
+
+        public static ExtractResult ProbeTextFile(string path)
+        {
             try
             {
                 using (FileStream stream = File.OpenRead(path))
@@ -110,11 +129,11 @@ namespace KnowledgeStudio
                     int read;
                     while (count < sample.Length && (read = stream.Read(sample, count, sample.Length - count)) > 0)
                         count += read;
-                    return DecodeText(sample, count, stream.ReadByte() == -1).Succeeded;
+                    return DecodeText(sample, count, stream.ReadByte() == -1);
                 }
             }
-            catch (IOException) { return false; }
-            catch (UnauthorizedAccessException) { return false; }
+            catch (IOException ex) { return ExtractResult.Failure("error", ex.Message); }
+            catch (UnauthorizedAccessException ex) { return ExtractResult.Failure("error", ex.Message); }
         }
 
         // Preserve the existing BOM -> UTF-8 -> CP932 order, but never substitute
@@ -144,7 +163,7 @@ namespace KnowledgeStudio
             }
             catch (DecoderFallbackException)
             {
-                return ExtractResult.Failure("text", "文字コードを正しく読み取れません。");
+                return ExtractResult.Failure("text", "文字コードを正しく読み取れません。", ExtractFailureReason.Binary);
             }
         }
 
@@ -159,7 +178,7 @@ namespace KnowledgeStudio
             {
                 char c = chars[i];
                 if (c == '\ufffd' || (char.IsControl(c) && c != '\t' && c != '\r' && c != '\n' && c != '\f'))
-                    return ExtractResult.Failure("text", "バイナリまたは不正な文字を含むため、テキストとして読み取れません。");
+                    return ExtractResult.Failure("text", "バイナリまたは不正な文字を含むため、テキストとして読み取れません。", ExtractFailureReason.Binary);
             }
             return new ExtractResult { Content = new string(chars, 0, length), Method = "text", Notes = name, Succeeded = true };
         }
@@ -804,7 +823,7 @@ namespace KnowledgeStudio
             }
             if (entry.Length < 0 || entry.Length > MaxXmlEntryBytes)
             {
-                throw new InvalidDataException(
+                throw new ExtractionSizeLimitException(
                     "OpenXML part exceeds the 64 MiB XML limit: " + entry.FullName);
             }
 
@@ -854,12 +873,12 @@ namespace KnowledgeStudio
                 }
                 if (entry.Length < 0 || entry.Length > MaxXmlEntryBytes)
                 {
-                    throw new InvalidDataException(
+                    throw new ExtractionSizeLimitException(
                         "OpenXML part exceeds the 64 MiB XML limit: " + name);
                 }
                 if (xmlBytes > MaxOpenXmlBytes - entry.Length)
                 {
-                    throw new InvalidDataException("OpenXML package exceeds the 256 MiB XML limit.");
+                    throw new ExtractionSizeLimitException("OpenXML package exceeds the 256 MiB XML limit.");
                 }
                 xmlBytes += entry.Length;
             }

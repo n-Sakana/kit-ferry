@@ -21,6 +21,13 @@ namespace Ferry
                 ".xls", ".xlsm", ".xlsb", ".xla", ".xlam", ".xltm"
             };
 
+        private static readonly HashSet<string> MarkdownExcludedExtensions =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ".jsonl", ".svg", ".trx", ".lock", ".sha256", ".sha512",
+                ".metadata", ".map", ".patch", ".diff", ".bak"
+            };
+
         public static FolderSnapshot Inspect(string path)
         {
             var fullPath = RequireDirectory(path);
@@ -97,10 +104,21 @@ namespace Ferry
 
         public static bool SupportsMarkdown(string path)
         {
+            return MarkdownExclusionFor(path) == null;
+        }
+
+        private static string MarkdownExclusionFor(string path)
+        {
             var extension = (Path.GetExtension(path) ?? string.Empty).ToLowerInvariant();
-            if (MarkdownDocumentExtensions.Contains(extension)) return true;
+            if (MarkdownExcludedExtensions.Contains(extension)
+                || extension.StartsWith(".bak-", StringComparison.Ordinal)
+                || extension.StartsWith(".bak_", StringComparison.Ordinal))
+                return "読ませたくない拡張子";
+            if (MarkdownDocumentExtensions.Contains(extension)) return null;
             // Keep unsupported legacy Office formats on their existing document route.
-            return KindFor(extension, false) == "Other" && KnowledgeStudio.Extract.IsTextFile(path);
+            if (KindFor(extension, false) != "Other") return "未対応の文書形式";
+            var probe = KnowledgeStudio.Extract.ProbeTextFile(path);
+            return probe.Succeeded ? null : MarkdownService.ExclusionReason(probe);
         }
 
         public static bool SupportsVba(string path)
@@ -269,16 +287,16 @@ namespace Ferry
         private static FolderFile Describe(FileInfo file, string name)
         {
             var extension = file.Extension.ToLowerInvariant();
-            var markdownSupported = SupportsMarkdown(file.FullName);
+            var markdownExclusion = MarkdownExclusionFor(file.FullName);
             return new FolderFile(
                 file.FullName,
                 name,
                 extension,
                 BadgeFor(extension),
-                KindFor(extension, markdownSupported),
+                KindFor(extension, markdownExclusion == null),
                 file.Length,
                 new DateTimeOffset(file.LastWriteTimeUtc, TimeSpan.Zero),
-                markdownSupported,
+                markdownExclusion,
                 VbaWorkbookExtensions.Contains(extension));
         }
 
@@ -349,7 +367,7 @@ namespace Ferry
             string kind,
             long size,
             DateTimeOffset modifiedUtc,
-            bool markdownSupported,
+            string markdownExclusionReason,
             bool vbaWorkbook)
         {
             FullPath = fullPath;
@@ -359,7 +377,8 @@ namespace Ferry
             Kind = kind;
             Size = size;
             ModifiedUtc = modifiedUtc;
-            MarkdownSupported = markdownSupported;
+            MarkdownSupported = markdownExclusionReason == null;
+            MarkdownExclusionReason = markdownExclusionReason;
             VbaWorkbook = vbaWorkbook;
         }
 
@@ -371,6 +390,7 @@ namespace Ferry
         public DateTimeOffset ModifiedUtc { get; private set; }
         public bool MarkdownSupported { get; private set; }
         public bool VbaWorkbook { get; private set; }
+        internal string MarkdownExclusionReason { get; private set; }
         internal string FullPath { get; private set; }
     }
 }

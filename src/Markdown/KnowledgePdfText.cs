@@ -42,7 +42,7 @@ namespace KnowledgeStudio
             {
                 return ExtractResult.Failure(
                     "pdf-builtin",
-                    "PDF が大きすぎます（512 MiB まで）。");
+                    "PDF が大きすぎます（512 MiB まで）。", ExtractFailureReason.TooLarge);
             }
 
             byte[] bytes = File.ReadAllBytes(path);
