@@ -1,6 +1,6 @@
 // Backend regression suite. No NuGet test runner required.
 // dotnet run --project tests/Ferry.Regression.csproj -c Release
-// Added for reproducibility; this delivery environment did not have a C# SDK/compiler.
+// Keep C# 5 syntax so the source also compiles with Windows PowerShell 5.1.
 using System;
 using System.Collections.Generic;
 using System.IO;

@@ -1,5 +1,19 @@
 # 回帰テスト
 
+## 2026-09-16 ソースファイル対応の確認
+
+`dotnet run --project tests/Ferry.Regression.csproj -c Release` は Linux / Windows でそれぞれ15件成功しました。
+既存11件に、ソースと拡張子なしのテキスト、BOM / CP932、不正符号列とバイナリの除外、
+全文再検査とコードフェンスの4群を追加しています。修正前は `Program.cs` の対象判定で失敗することも確認しました。
+`dotnet build Ferry.csproj -c Release` は両OSで警告0・エラー0、`optical-core.test.js` は20件成功、
+`browser_regression.py` は16項目成功です。ブラウザ試験の API モックと合成画像の範囲は従来どおりです。
+
+別途、Windows PowerShell 5.1 の通常起動と OS のフォルダ選択を使い、ソース・CP932・UTF-8 BOM・
+拡張子なし・既存の PDF / Office 等の12件を1枚に書き出し、出力フォルダと Markdown を開くまで確認しました。
+PNG・EXE の一覧除外と、完了後の選択リセットも確認しています。実カメラとモバイルは今回の確認範囲に含みません。
+
+以下の「今回」は、元の 2026-09-08 提供時点の検証記録です。
+
 ## 実行済みと未実行の区別
 
 今回実行できたのは JavaScript 単体試験、および Chromium + 同梱 WASM による合成画像・仮想カメラ試験です。
