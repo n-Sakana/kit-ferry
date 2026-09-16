@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -44,6 +45,10 @@ namespace Ferry
                 Run("BOM and CP932 source text", TestMarkdownEncodings);
                 Run("binary and invalid text excluded from Markdown", TestMarkdownBinary);
                 Run("text validation at export and safe code fences", TestMarkdownFences);
+                Run("Markdown ignores generated text and backup suffixes", TestMarkdownExcludedExtensions);
+                Run("Markdown lists omissions and their reasons", TestMarkdownOmissions);
+                Run("Markdown can write only omissions without changing selection rules", TestMarkdownOnlyOmissions);
+                Run("large omission lists preserve every relative path", TestMarkdownManyOmissions);
                 Console.WriteLine("PASS: " + _passed + " backend tests");
                 return 0;
             }
@@ -289,6 +294,96 @@ namespace Ferry
                 Require(!file.MarkdownSupported && !FolderCatalog.SupportsMarkdown(file.FullPath), "binary admitted: " + file.Name);
                 Throws<ArgumentException>(delegate { MarkdownService.Convert(snapshot, new[] { file.Name }, true, Path.Combine(_root, "binary-output")); });
             }
+        }
+
+        private static void TestMarkdownExcludedExtensions()
+        {
+            var input = Directory.CreateDirectory(Path.Combine(_root, "excluded-extensions")).FullName;
+            var excluded = new[] { "events.jsonl", "icon.svg", "test.TRX", "yarn.lock", "file.sha256",
+                "file.sha512", "build.metadata", "app.js.map", "changes.patch", "changes.diff",
+                "source.cs.bak", "source.cs.bak-20260912-sora", "source.cs.bak_20260912" };
+            var included = new[] { "Program.cs", "Makefile", "source.unknown", "app.log", "data.csv",
+                "data.tsv", "config.json", "source.locksmith", "source.bakery" };
+            foreach (var name in excluded.Concat(included)) File.WriteAllText(Path.Combine(input, name), "TEXT_BODY_SENTINEL\n");
+            var snapshot = FolderCatalog.Inspect(input);
+            foreach (var name in excluded)
+            {
+                Require(!snapshot.Files.Single(f => f.Name == name).MarkdownSupported, "excluded suffix admitted: " + name);
+                Require(!FolderCatalog.SupportsMarkdown(Path.Combine(input, name)), "direct support differs: " + name);
+            }
+            Require(snapshot.Files.Count == excluded.Length + included.Length, "optical catalogue lost excluded files");
+            Require(snapshot.Files.Where(f => f.MarkdownSupported).Select(f => f.Name).OrderBy(n => n)
+                .SequenceEqual(included.OrderBy(n => n)), "ordinary source/log/CSV/TSV text changed");
+        }
+
+        private static void TestMarkdownOmissions()
+        {
+            var input = Directory.CreateDirectory(Path.Combine(_root, "omissions")).FullName;
+            Directory.CreateDirectory(Path.Combine(input, "assets"));
+            File.WriteAllText(Path.Combine(input, "Program.cs"), "class Included {}\n");
+            File.WriteAllText(Path.Combine(input, "unchecked.cs"), "UNCHECKED_BODY_SENTINEL\n");
+            File.WriteAllText(Path.Combine(input, "assets/icon.svg"), "EXCLUDED_BODY_SENTINEL\n");
+            File.WriteAllBytes(Path.Combine(input, "assets/image.png"), new byte[] { 137, 80, 78, 71, 0 });
+            File.WriteAllText(Path.Combine(input, "broken.docx"), "BROKEN_BODY_SENTINEL\n");
+            File.WriteAllText(Path.Combine(input, "gone.cs"), "GONE_BODY_SENTINEL\n");
+            File.WriteAllText(Path.Combine(input, "tail.cs"), new string('a', 9000) + "\0BINARY_BODY_SENTINEL");
+            using (var stream = File.Create(Path.Combine(input, "large.pdf"))) stream.SetLength(512L * 1024 * 1024 + 1);
+            using (var stream = File.Create(Path.Combine(input, "large.docx")))
+            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create))
+            using (var part = zip.CreateEntry("word/document.xml", CompressionLevel.Fastest).Open())
+            {
+                var buffer = new byte[1024 * 1024];
+                for (var i = 0; i < 65; i++) part.Write(buffer, 0, buffer.Length);
+            }
+            var snapshot = FolderCatalog.Inspect(input);
+            File.Delete(Path.Combine(input, "gone.cs"));
+            var selected = snapshot.Files.Where(f => f.MarkdownSupported && f.Name != "unchecked.cs").Select(f => f.Name).ToArray();
+            var result = MarkdownService.Convert(snapshot, selected, true, Path.Combine(_root, "markdown-omissions"));
+            Require(result.ConvertedCount == 1 && result.FailedCount == 5 && result.FilesWritten == 1, "omission counts changed");
+            var content = File.ReadAllText(result.OutputPath);
+            Require(content.Contains("## 対象外"), "omission section missing");
+            foreach (var row in new[] {
+                "assets/icon.svg</code> | 読ませたくない拡張子",
+                "assets/image.png</code> | バイナリまたは不正な文字コード",
+                "tail.cs</code> | バイナリまたは不正な文字コード",
+                "large.pdf</code> | 大きすぎる（既存の上限）",
+                "large.docx</code> | 大きすぎる（既存の上限）",
+                "broken.docx</code> | 変換に失敗した",
+                "gone.cs</code> | 変換に失敗した",
+                "unchecked.cs</code> | 未選択" }) Require(content.Contains(row), "missing omission: " + row);
+            Require(content.Contains("class Included {}") && !content.Contains("BODY_SENTINEL") && !content.Contains("\0"), "omitted contents leaked");
+            Require(!content.Contains(input), "omission report contains an absolute path");
+            Require(Directory.GetFiles(Path.GetDirectoryName(result.OutputPath)).Length == 1, "omissions written as separate files");
+            var single = FolderCatalog.InspectFiles(new[] { Path.Combine(input, "Program.cs") });
+            var singleResult = MarkdownService.Convert(single, new[] { "Program.cs" }, true, Path.Combine(_root, "markdown-single-omissions"));
+            Require(!File.ReadAllText(singleResult.OutputPath).Contains("icon.svg"), "report escaped explicit selection scope");
+        }
+
+        private static void TestMarkdownOnlyOmissions()
+        {
+            var input = Directory.CreateDirectory(Path.Combine(_root, "only-omissions")).FullName;
+            File.WriteAllText(Path.Combine(input, "icon.svg"), "DO_NOT_READ_BODY_SENTINEL");
+            var snapshot = FolderCatalog.Inspect(input);
+            var result = MarkdownService.Convert(snapshot, new string[0], true, Path.Combine(_root, "markdown-only-omissions"));
+            Require(result.FilesWritten == 1 && result.ConvertedCount == 0 && result.FailedCount == 0, "exclusions-only export failed");
+            var content = File.ReadAllText(result.OutputPath);
+            Require(content.Contains("icon.svg</code> | 読ませたくない拡張子") && !content.Contains("BODY_SENTINEL"), "exclusions-only report lost names");
+            Throws<ArgumentException>(delegate { MarkdownService.Convert(_source, new string[0], true, Path.Combine(_root, "no-selection")); });
+            Throws<ArgumentException>(delegate { MarkdownService.Convert(_source, new[] { "../outside.cs" }, true, Path.Combine(_root, "bad-selection")); });
+        }
+
+        private static void TestMarkdownManyOmissions()
+        {
+            var input = Directory.CreateDirectory(Path.Combine(_root, "many-omissions")).FullName;
+            File.WriteAllText(Path.Combine(input, "Program.cs"), "class Included {}");
+            for (var i = 0; i < 120; i++) File.WriteAllText(Path.Combine(input, "trace-" + i + ".jsonl"), "EXCLUDED_BODY_SENTINEL");
+            File.WriteAllText(Path.Combine(input, "a&b`[x].svg"), "EXCLUDED_BODY_SENTINEL");
+            var result = MarkdownService.Convert(FolderCatalog.Inspect(input), new[] { "Program.cs" }, true, Path.Combine(_root, "markdown-many"));
+            var content = File.ReadAllText(result.OutputPath);
+            Require(content.Contains("<details>") && content.Contains("121 件") && content.Contains("</details>"), "large list not folded");
+            for (var i = 0; i < 120; i++) Require(content.Contains("trace-" + i + ".jsonl</code>"), "omission list truncated: " + i);
+            Require(content.Contains("a&amp;b&#96;&#91;x&#93;.svg"), "path markup not escaped");
+            Require(!content.Contains("BODY_SENTINEL"), "excluded content leaked into large report");
         }
 
         private static void TestMarkdownFences()
